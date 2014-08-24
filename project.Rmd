@@ -1,0 +1,113 @@
+<!-- Make sure that the knitr package is installed and loaded. -->
+<!-- For more info on the package options see http://yihui.name/knitr/options -->
+
+<!-- Replace below with the title of your project -->
+### PREDICTING THE QUALITY OF BARBELL LIFTS USING MACHINE LEARNING AND PERSONAL-ACTIVITY DATA
+
+<!-- Enter the code required to load your data in the space below. The data will be loaded but the line of code won't show up in your write up (echo=FALSE) in order to save space-->
+```{r echo=FALSE}
+```
+
+<!-- In the remainder of the document, add R code chunks as needed -->
+
+### Introduction
+Many devices are becoming available that allow to quantify self-movement during the practice of sports and to produce large amounts of data that need to be interpreted. One basic goal most people have is to measure _the amount_ of an activity they perform (e.g. distance run or lifts done), but a more profitable--and also more challenging--use of the data would be to predict _the quality_ of the performance. With this goal, the Weight Lifting Exercise Dataset was created (see http://groupware.les.inf.puc-rio.br/har). Data were collected by asking 6 participants to wear belt, forearm, arm, and dumbell accelerometers and to perform barbell lifts in various ways, both correct and incorrect. The data was classified in 5 separate classes.
+
+### Goal
+The goal of this project was to build a classification model to predict the quality of barbell lifts from newly collected data. For this, we used a large training set, containing information about the class of each measure, and a smalled test set for which class information is not available. We aimed at predicting the class of each test measure from the model.
+
+### Model construction
+First, we loaded the training and testing data sets, originally in csv format, as follows:
+```{r echo=TRUE, cache=TRUE}
+train <- read.csv("pml-training.csv", header = TRUE)
+dim(train)
+test <- read.csv("pml-testing.csv", header = TRUE)
+dim(test)
+```
+We used the caret package:
+```{r echo=TRUE}
+library(caret)
+```
+A brief exploration of the data showed that there are 160 variables, but most of them are statistical data, e.g. averages, standard deviations and kurtosis, which are either empty or not available, and in any case have no predictive value.
+```{r echo=TRUE}
+train[1,]
+```
+Therefore, we removed all empty and NA variables:
+```{r echo=TRUE}
+trainsubset <- train[,!is.na(train[1,]) & train[1,]!=""]
+```
+Moreover, information about the user and timestamps (see first 7 columns) is not useful either, so we removed it as well:
+```{r echo=TRUE}
+trainsubset2 <- trainsubset[,8:60]
+dim(trainsubset2)
+```
+As shown, the result is a set with 53 variables, including "classe", which is the class of the measure that the model should predict from the rest of the variables.
+
+A brief exploratory search of features, using featurePlot, did not reveal any simple correlations between variables. For instance:
+```{r echo=TRUE, cache=TRUE}
+featurePlot(trainsubset2[1:6],trainsubset2$classe,plot="pairs")
+```
+For this reason, a model including all variables seemed reasonable, at least in the first instance.
+
+Before building a prediction model, it was necessary to split the training data into a training set and a testing set, in the usual proportion of 60:40:
+```{r echo=TRUE}
+inTrain <- createDataPartition(y=trainsubset2$classe, p=0.6, list=FALSE)
+training <- trainsubset2[inTrain,]
+testing <- trainsubset2[-inTrain,]
+```
+It is important to differentiate the test set that we used for validation purposes (testing) from the test set for which class values must be predicted (test).
+
+<!-- NOTE: Training the model takes a very long time, so here the R code is shown
+but not run. The final model fit is loaded from a pre-saved file.
+We also load the partition, to make sure that the data are exactly 
+as in the first run. I should have used set.seed, but I forgot -->
+Random forests are powerful general classification algorithms that require few initial assumptions and therefore are a good choice for the kind of complex data that we have. A fit to a random forest can be carried out as follows:
+```{r echo=TRUE, eval=FALSE}
+modFit <- train(classe ~ ., data=training,method="rf",prox=TRUE)
+```
+```{r echo=FALSE, eval=TRUE}
+load("data/modFit.RData")
+load("data/training.RData")
+load("data/testing.RData")
+options(digits=7)
+```
+The result was:
+```{r echo=TRUE}
+modFit
+```
+As shown, the funcion train attempted several models with different numbers of variables per level (mtry). The best value found was mtry=2. The accuracy was not perfect (98.5% accuracy), so we tried to clean the data further. In particular, removing rows for which new_window=="yes", which seem to follow a slightly different trend than the rest of the rows did not improved the model. Therefore, we used the initial fit to validate and predict classes. It is expected that the accuracy found by validation and in the target (test) set should be also around 98.5%. Indeed, it was better (see below).
+
+### Validation
+To validate the model, we used it to predict the (known) classes of the testing set that we obtained by splitting the training data (see above).
+```{r echo=TRUE}
+pred <- predict(modFit,testing)
+```
+The quality of the fit can be estimated using a confusion matrix:
+```{r echo=TRUE}
+confusionMatrix(pred,testing$classe)
+```
+This shows that, in this case, estimating the accuracy of the model by comparing the predicted class with the known class produces an excellent value of 99.3%.
+
+### Prediction of classes
+
+The purpose of the model is, of course, to classify new data. In this assignment, we want to predict the quality classes of the measurements in the test set. Therefore, we applied the model to the test (target) data:
+
+```{r echo=TRUE}
+pred_test <- predict(modFit,test)
+pred_test
+```
+In general, there is no guarantee that the predicted class will be correct. However, the high accuracy obtained in the validation step suggests that most predictions will indeed be correct, and, in fact, all of them were in this assignment.
+
+### Conclusion
+A random forest classification model of personal-activity data, collected by volunteers wearing a set of accelerometers during weight lifting exercises, is able to predict the quality of unclassified exercise data with an accuracy of over 99%. The model uses data from 52 variables and decides which out of five levels (labelled A,B,C,D,E) the data belong to. The model may potentially be used to improve the quality of training programs.
+
+### References
+
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz35O9RuNWh
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz35OD1ubAF
+
